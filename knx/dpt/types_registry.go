@@ -26,6 +26,7 @@ var (
 		new(DPT_9001),
 		new(DPT_9004),
 		new(DPT_9005),
+		new(DPT_9006),
 		new(DPT_9007),
 
 		// 12.xxx
@@ -115,7 +116,7 @@ var (
 		new(DPT_14077),
 		new(DPT_14078),
 		new(DPT_14079),
-		
+
 		// 17.xxx
 		new(DPT_17001),
 		// 18.xxx
