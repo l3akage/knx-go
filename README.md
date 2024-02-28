@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/vapourismo/knx-go.svg?branch=master)](https://travis-ci.org/vapourismo/knx-go)
+[![Check](https://github.com/vapourismo/knx-go/actions/workflows/check.yaml/badge.svg?branch=master)](https://github.com/vapourismo/knx-go/actions/workflows/check.yaml)
 [![GoDoc](https://godoc.org/github.com/vapourismo/knx-go?status.svg)](https://godoc.org/github.com/vapourismo/knx-go)
 
 # knx-go
@@ -138,6 +138,37 @@ func main() {
 	util.Logger = log.New(os.Stdout, "", log.LstdFlags)
 
 	servers, err := knx.Discover("224.0.23.12:3671", time.Millisecond*750)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	util.Logger.Printf("%# v", pretty.Formatter(servers))
+}
+```
+
+### Describe a Single KNXnet/IP Server
+
+The following example shows how to get a description from a single server.
+
+```go
+package main
+
+import (
+	"log"
+	"os"
+	"time"
+
+	"github.com/kr/pretty"
+
+	"github.com/vapourismo/knx-go/knx"
+	"github.com/vapourismo/knx-go/knx/util"
+)
+
+func main() {
+	util.Logger = log.New(os.Stdout, "", log.LstdFlags)
+
+	// Describe KNXnet/IP server at given address and default port
+	servers, err := knx.DescribeTunnel("192.168.1.254:3671", time.Millisecond*750)
 	if err != nil {
 		log.Fatal(err)
 	}

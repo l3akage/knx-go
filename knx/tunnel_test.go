@@ -5,6 +5,7 @@ package knx
 
 import (
 	"testing"
+	"time"
 
 	"github.com/vapourismo/knx-go/knx/cemi"
 	"github.com/vapourismo/knx-go/knx/knxnet"
@@ -20,7 +21,7 @@ func makeTunnelConn(
 		config:  config,
 		channel: channel,
 		ack:     make(chan *knxnet.TunnelRes),
-		inbound: make(chan cemi.Message),
+		inbound: make(chan cemi.Message, 100),
 	}
 }
 
@@ -157,7 +158,7 @@ func TestTunnelConn_requestConn(t *testing.T) {
 	})
 
 	// The gateway responds to the connection request.
-	t.Run("Ok", func(t *testing.T) {
+	t.Run("Ok - without local address", func(t *testing.T) {
 		client, gateway := newDummySockets()
 
 		t.Run("Gateway", func(t *testing.T) {
@@ -167,6 +168,15 @@ func TestTunnelConn_requestConn(t *testing.T) {
 
 			msg := <-gateway.Inbound()
 			if req, ok := msg.(*knxnet.ConnReq); ok {
+
+				expectedHostInfo := knxnet.HostInfo{
+					Protocol: knxnet.UDP4,
+				}
+
+				if !expectedHostInfo.Equals(req.Control) || !expectedHostInfo.Equals(req.Tunnel) {
+					t.Fatalf("Unexpected host for request: %+v", req)
+				}
+
 				gateway.sendAny(&knxnet.ConnRes{
 					Channel: 1,
 					Status:  knxnet.NoError,
@@ -185,6 +195,60 @@ func TestTunnelConn_requestConn(t *testing.T) {
 			conn := Tunnel{
 				sock:   client,
 				config: DefaultTunnelConfig,
+			}
+
+			err := conn.requestConn()
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+
+	// The gateway responds to the connection request with local address.
+	t.Run("Ok - with local address", func(t *testing.T) {
+		client, gateway := newDummySockets()
+
+		t.Run("Gateway", func(t *testing.T) {
+			t.Parallel()
+
+			defer gateway.Close()
+
+			msg := <-gateway.Inbound()
+			if req, ok := msg.(*knxnet.ConnReq); ok {
+
+				expectedHostInfo := knxnet.HostInfo{
+					Protocol: knxnet.UDP4,
+					Address:  [4]byte{192, 168, 1, 82},
+					Port:     4321,
+				}
+
+				if !expectedHostInfo.Equals(req.Control) || !expectedHostInfo.Equals(req.Tunnel) {
+					t.Fatalf("Unexpected host for request: %+v", req)
+				}
+
+				gateway.sendAny(&knxnet.ConnRes{
+					Channel: 1,
+					Status:  knxnet.NoError,
+					Control: req.Control,
+				})
+			} else {
+				t.Fatalf("Unexpected incoming message type: %T", msg)
+			}
+		})
+
+		t.Run("Client", func(t *testing.T) {
+			t.Parallel()
+
+			defer client.Close()
+
+			conn := Tunnel{
+				sock: client,
+				config: TunnelConfig{
+					ResendInterval:    500 * time.Millisecond,
+					HeartbeatInterval: 1 * time.Second,
+					ResponseTimeout:   1 * time.Second,
+					SendLocalAddress:  true,
+				},
 			}
 
 			err := conn.requestConn()
@@ -807,7 +871,6 @@ func TestTunnelConn_handleTunnelReq(t *testing.T) {
 
 	t.Run("Ok", func(t *testing.T) {
 		client, gateway := newDummySockets()
-		inbound := make(chan cemi.Message)
 
 		const (
 			channel       uint8 = 1
@@ -845,7 +908,6 @@ func TestTunnelConn_handleTunnelReq(t *testing.T) {
 			seqNumber := sendSeqNumber
 
 			conn := makeTunnelConn(client, DefaultTunnelConfig, channel)
-			conn.inbound = inbound
 
 			req := &knxnet.TunnelReq{
 				Channel:   channel,
@@ -861,12 +923,8 @@ func TestTunnelConn_handleTunnelReq(t *testing.T) {
 			if seqNumber != sendSeqNumber+1 {
 				t.Error("Sequence number has not been increased")
 			}
-		})
 
-		t.Run("Client", func(t *testing.T) {
-			t.Parallel()
-
-			<-inbound
+			<-conn.Inbound()
 		})
 	})
 }

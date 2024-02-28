@@ -98,7 +98,7 @@ func newBridge(gatewayAddr, otherAddr string) (*bridge, error) {
 	}
 
 	if addr.IP.IsMulticast() {
-		// Instantiate routing facilities.
+		// Instantiate routing facilities. MulticastLoopback is disabled by default.
 		router, err := knx.NewRouter(otherAddr, knx.DefaultRouterConfig)
 		if err != nil {
 			tunnel.Close()
@@ -126,7 +126,7 @@ func (br *bridge) serve() error {
 		// Receive message from gateway.
 		case msg, open := <-br.tunnel.Inbound():
 			if !open {
-				return errors.New("Tunnel channel closed")
+				return errors.New("tunnel channel closed")
 			}
 
 			if ind, ok := msg.(*cemi.LDataInd); ok {
@@ -139,7 +139,7 @@ func (br *bridge) serve() error {
 		// Receive message from router.
 		case msg, open := <-br.other.Inbound():
 			if !open {
-				return errors.New("Router channel closed")
+				return errors.New("router channel closed")
 			}
 
 			if ind, ok := msg.(*cemi.LDataInd); ok {

@@ -6,6 +6,8 @@ package knxnet
 import (
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 
 	"github.com/vapourismo/knx-go/knx/util"
 )
@@ -39,6 +41,45 @@ type HostInfo struct {
 	Port     Port
 }
 
+// HostInfoFromAddress returns HostInfo from an address.
+func HostInfoFromAddress(address net.Addr) (HostInfo, error) {
+	hostinfo := HostInfo{}
+
+	ipS, portS, err := net.SplitHostPort(address.String())
+	if err != nil {
+		return hostinfo, err
+	}
+
+	ip := net.ParseIP(ipS)
+	if ip == nil {
+		return hostinfo, fmt.Errorf("unable to determine IP")
+	}
+
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return hostinfo, fmt.Errorf("only IPv4 is currently supported")
+	}
+
+	port, _ := strconv.ParseUint(portS, 10, 16)
+	if port == 0 {
+		return hostinfo, fmt.Errorf("unable to determine port")
+	}
+
+	copy(hostinfo.Address[:], ipv4)
+	hostinfo.Port = Port(port)
+
+	switch address.Network() {
+	case "udp":
+		hostinfo.Protocol = UDP4
+	case "tcp":
+		hostinfo.Protocol = TCP4
+	default:
+		return hostinfo, fmt.Errorf("unsupported network")
+	}
+
+	return hostinfo, nil
+}
+
 // Equals checks whether both structures are equal.
 func (info HostInfo) Equals(other HostInfo) bool {
 	return info.Protocol == other.Protocol &&
@@ -51,7 +92,7 @@ func (HostInfo) Size() uint {
 	return 8
 }
 
-// Pack assembles the host info structure in the given buffer.
+// Pack assembles the Host Info structure in the given buffer.
 func (info *HostInfo) Pack(buffer []byte) {
 	util.PackSome(
 		buffer,
@@ -73,7 +114,7 @@ func (info *HostInfo) Unpack(data []byte) (n uint, err error) {
 	}
 
 	if length != 8 {
-		return n, errors.New("Host info structure length is invalid")
+		return n, errors.New("host info structure length is invalid")
 	}
 
 	return

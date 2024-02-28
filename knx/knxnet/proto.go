@@ -15,15 +15,17 @@ import (
 // ServiceID identifies the service that is contained in a packet.
 type ServiceID uint16
 
-// String generates a string representation.
+// String generates a string representation of the service.
 func (srv ServiceID) String() string {
 	return fmt.Sprintf("%#04x", uint16(srv))
 }
 
-// These are supported services.
+// Currently supported services.
 const (
 	SearchReqService    ServiceID = 0x0201
 	SearchResService    ServiceID = 0x0202
+	DescrReqService     ServiceID = 0x0203
+	DescrResService     ServiceID = 0x0204
 	ConnReqService      ServiceID = 0x0205
 	ConnResService      ServiceID = 0x0206
 	ConnStateReqService ServiceID = 0x0207
@@ -96,10 +98,10 @@ func AllocAndPack(srv ServicePackable) []byte {
 	return buffer
 }
 
-// These are errors that might occur during unpacking.
+// These are errors that might occur during unpacking of the header.
 var (
-	ErrHeaderLength  = errors.New("Header length is not 6")
-	ErrHeaderVersion = errors.New("Protocol version is not 16")
+	ErrHeaderLength  = errors.New("header length is not 6")
+	ErrHeaderVersion = errors.New("protocol version is not 16")
 )
 
 type serviceUnpackable interface {
@@ -107,34 +109,11 @@ type serviceUnpackable interface {
 	Service
 }
 
-// Unpack parses a KNXnet/IP packet and retrieves its service payload.
-//
-// On success, the variable pointed to by srv will contain a pointer to a service type.
-// You can cast it to the matching against service type, like so:
-//
-// 	var srv Service
-//
-// 	_, err := Unpack(r, &srv)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-//
-// 	switch srv := srv.(type) {
-// 		case *ConnRes:
-// 			// ...
-//
-// 		case *TunnelReq:
-// 			// ...
-//
-// 		// ...
-// 	}
-//
-func Unpack(data []byte, srv *Service) (uint, error) {
+// UnpackHeader extracts information from the KNXnet/IP packet header.
+func UnpackHeader(data []byte, serviceID *ServiceID, totalLen *uint16) (uint, error) {
 	var headerLen, version uint8
-	var srvID ServiceID
-	var totalLen uint16
 
-	n, err := util.UnpackSome(data, &headerLen, &version, (*uint16)(&srvID), &totalLen)
+	n, err := util.UnpackSome(data, &headerLen, &version, (*uint16)(serviceID), totalLen)
 	if err != nil {
 		return n, err
 	}
@@ -147,6 +126,39 @@ func Unpack(data []byte, srv *Service) (uint, error) {
 		return n, ErrHeaderVersion
 	}
 
+	return n, nil
+}
+
+// Unpack parses a KNXnet/IP packet and retrieves its service payload.
+//
+// On success, the variable pointed to by srv will contain a pointer to a service type.
+// You can cast it to the matching against service type, like so:
+//
+//	var srv Service
+//
+//	_, err := Unpack(r, &srv)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	switch srv := srv.(type) {
+//		case *ConnRes:
+//			// ...
+//
+//		case *TunnelReq:
+//			// ...
+//
+//		// ...
+//	}
+func Unpack(data []byte, srv *Service) (uint, error) {
+	var srvID ServiceID
+	var totalLen uint16
+
+	n, err := UnpackHeader(data, &srvID, &totalLen)
+	if err != nil {
+		return n, err
+	}
+
 	var body serviceUnpackable
 	switch srvID {
 	case SearchReqService:
@@ -154,6 +166,12 @@ func Unpack(data []byte, srv *Service) (uint, error) {
 
 	case SearchResService:
 		body = &SearchRes{}
+
+	case DescrReqService:
+		body = &DescriptionReq{}
+
+	case DescrResService:
+		body = &DescriptionRes{}
 
 	case ConnReqService:
 		body = &ConnReq{}
